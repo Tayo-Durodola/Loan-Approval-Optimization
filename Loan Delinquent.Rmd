@@ -1,0 +1,457 @@
+---
+title: "Loan Delinquent Case Study"
+author: "Tayo Durodola"
+date: "`r Sys.Date()`"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+editor_options:
+  markdown:
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Load Packages
+
+```{r warning = FALSE, message = FALSE}
+library(ggplot2) # For graphs and visualizations
+library(caTools) # Split Data into Test and Train Set
+library(rpart) # Recursive Partitioning and Regression Trees (Decision Trees)
+library(rattle) # To visualize decision tree
+library(tinytex)
+```
+
+### Import Data
+
+```{r}
+getwd()
+loandata = read.csv("C:/Users/durod/OneDrive/Desktop/DOC/MSC/COMPUTATIONAL INTELLIGENCE/DATASETS/Loan_Delinquent_Dataset.csv")
+```
+
+## Exploratory Data Analysis
+
+### Sanity checks
+
+```{r}
+# Look at the first and last few rows to ensure that the data is read in properly
+head(loandata)
+tail(loandata)
+dim(loandata)
+colnames(loandata)
+```
+
+### Descriptive Statistics
+
+```{r}
+# Structure of data
+str(loandata) 
+```
+
+-   The dataset has 11548 rows and 8 columns of data
+-   ID column does not hold any statistical significance
+-   isDelinquent is the dependent variable - type integer.
+-   isDelinquent is a an integer variable and should be converted to
+    factor for further analysis.
+-   All the dependent variables are of factor type.
+
+```{r}
+# Change vaiables with character datatype to factor
+loandata$isDelinquent = as.factor(loandata$isDelinquent)
+loandata$term = as.factor(loandata$term)
+loandata$gender = as.factor(loandata$gender)
+loandata$purpose = as.factor(loandata$purpose)
+loandata$home_ownership = as.factor(loandata$home_ownership)
+loandata$age = as.factor(loandata$age)
+loandata$FICO = as.factor(loandata$FICO)
+
+# Remove ID Column
+loandata = loandata[, -1] # Dropping ID Column
+
+# Summary of dataset
+summary(loandata)
+```
+
+Observations
+
+-   Most of the loans are for a 36 month term loan.
+-   Customers in the age group 20-25 are almost as many as those of age
+    \>25
+-   Most loan applications that we get are for house loans followed by
+    car loans
+-   There are 2 levels named 'other' and 'Other' under purpose variable.
+    Since we do not have any other information about these, we will
+    merge these levels
+-   There are no missing vaues in out dataset
+-   Most customers have either mortgaged their houses or live on rent.
+    Very few applicants \<10% own their house
+
+### Data Cleaning
+
+```{r}
+levels(loandata$purpose)
+#Merge the purpose levels 'Other' and 'other'
+levels(loandata$purpose) = c("Car","House","Medical","Other","Other","Personal","Wedding")
+levels(loandata$purpose)
+summary(loandata)
+
+```
+
+### Univariate and Bivariate analysis
+
+```{r}
+#Distribution of the dependent variable
+prop.table(table(loandata$isDelinquent))
+summary(loandata)
+```
+
+66% of the customers are delinquent.
+
+Let us plot percent stacked barchart to see the effect of independent
+variables on the probability of delinquency
+
+```{r echo=FALSE}
+ggplot(loandata, aes(fill = isDelinquent, x = FICO)) + 
+    geom_bar(position="fill")
+ggplot(loandata, aes(fill = isDelinquent, x = term)) + 
+    geom_bar(position="fill")
+ggplot(loandata, aes(fill = isDelinquent, x = purpose)) + 
+    geom_bar(position="fill")
+ggplot(loandata, aes(fill = isDelinquent, x = home_ownership)) + 
+    geom_bar(position="fill")
+ggplot(loandata, aes(fill = isDelinquent, x = gender)) + 
+    geom_bar(position="fill")
+ggplot(loandata, aes(fill = isDelinquent, x = age)) + 
+    geom_bar(position="fill")
+
+```
+
+Observations
+
+-   FICO score and term of loan application appear to be very strong
+    indicators of delinquency.
+-   If FICO score is \>500 the chances of delinquency decrease quite a
+    lot compared to when FICO score is between 300-500
+-   Similarly, loans for 60 month term loan seem to be prominently from
+    the delinquent customers.
+-   Other factors appear to be not very good indicators of delinqency.
+    (We can use chi square tests to determine statistical significance
+    in the association between two categorical variables)
+
+We observed that a high FICO score means that the chances of delinquency
+are lower, let us see if any of the other variables indicate higher FICO
+scores
+
+```{r echo=FALSE}
+# **** Optional ****
+ggplot(loandata, aes(fill = FICO, x = home_ownership)) + 
+  geom_bar(position="fill") + 
+  scale_fill_manual(values = c("purple", "pink")) 
+ggplot(loandata, aes(fill = FICO, x = gender)) + 
+    geom_bar(position="fill") + 
+  scale_fill_manual(values = c("purple", "pink")) 
+ggplot(loandata, aes(fill = FICO, x = age)) + 
+    geom_bar(position="fill") + 
+  scale_fill_manual(values = c("purple", "pink")) 
+```
+
+1.  Home ownership and gender seem to have slight impact on the FICO
+    scores.
+2.  Age seems to have a much bigger impact on FICO scores.
+
+Let us check which of these differences are statistically significant.
+
+Similar to z-tests and t-tests that we have learned for numerical
+variables. Chi-Square test is a statistical method to determine if two
+categorical variables have a significant correlation between them.
+(<https://www.tutorialspoint.com/r/r_chi_square_tests.htm>)
+
+Null Hypothesis - There is no correlation between the two categorical
+variables\
+Alternate Hypothesis - Variable A is correlated with variable B
+
+```{r}
+chisq.test(loandata$FICO,loandata$home_ownership) #Chi-sq test between FICO and Home Ownership
+chisq.test(loandata$FICO,loandata$gender) #Chi-sq test between FICO and Gender
+chisq.test(loandata$FICO,loandata$age) #Chi-sq test between FICO and Age
+```
+
+p-values are \<\< 0.01\
+All the differences that we see in the 3 plots are infact statistically
+significant.
+
+1.  There is a correlation between FICO Score and house_ownership.
+    People who have mortgaged their houses have higher FICO scores than
+    people who own the house (peculiar!).
+2.  There is a correlation between FICO Score and gender. More females
+    have \>500 FICO scores as compared to Males.
+3.  There is a correlation between FICO Score and age. People \>25 years
+    of age have higher FICO scores as compared to people of age 20-25.
+
+## Model Building - Approach
+
+1.  Partition the data into train and test set.
+2.  Built a CART model on the train data.
+3.  Tune the model and prune the tree, if required.
+4.  Test the data on test set.
+
+## Split into train and test
+
+```{r}
+set.seed(1000) #To ensure reproducibility
+
+sample <- sample.split(loandata$isDelinquent,SplitRatio = 0.7)
+train <- subset(loandata,sample == TRUE)
+test <- subset(loandata,sample == FALSE)
+
+nrow(train)
+nrow(test)
+
+# Check that the distribution of the dependent variable is similar in train and test sets
+prop.table(table(loandata$isDelinquent))
+prop.table(table(train$isDelinquent))
+prop.table(table(test$isDelinquent))
+
+```
+
+## Build a CART model on the train dataset
+
+We will use the "rpart" and the "rattle" libraries to build decision
+trees.
+
+```{r}
+# One of the benefits of decision tree training is that you can stop training 
+# based on several thresholds.
+
+# Setting the control parameters (to control the growth of the tree)
+
+# minsplit - min # of obs that must exist in a node in order for a split to be attempted
+# minbucket - the minimum number of observations in any terminal leaf node
+# cp - complexity parameter
+# xval - number of cross-validations
+
+# The initial minsplit and minbucket parameters are set using general thumb rules
+# minsplit = 2-3% of data
+# minbucket = minsplit/3
+
+min_split = 0.2*nrow(train)
+min_split
+min_bucket = min_split/3
+min_bucket
+
+r.ctrl = rpart.control(minsplit = min_split, minbucket = min_bucket, cp = 0, xval = 10)
+
+# Building the CART model
+
+# formula - response variable~predictor variables  
+# data - dataset
+# method - "class" - for classification, "anova" for regression
+# control - tree control parameters
+
+model1 <- rpart(formula = isDelinquent~., data = train, method = "class", control = r.ctrl)
+model1
+
+```
+
+-   Let us understand the decision tree created
+
+    -   node) - Node number\
+    -   split - split or test
+    -   n - number of entities at that node
+    -   loss - number of incorrectly classified entities at that node
+    -   yval - default classification for that node
+    -   (yprob) - the distribution of classes in that node (The
+        distribution is ordered by the classes, and is the same order
+        for all nodes)
+    -   '\*' - denotes terminal node (i.e., the tree is not split any
+        further at that node)
+
+-   The first node of any tree is always the root node.
+
+## Visualise the decision tree
+
+```{r}
+#Displaying the decision tree
+fancyRpartPlot(model1)
+```
+
+```{r}
+model1$variable.importance
+# Variable importance is generally computed based on the corresponding reduction of predictive accuracy 
+# when the predictor of interest is removed.
+```
+
+The major advantage of a decision tree model over other classification
+models is that it gives a highly interpretable output.
+
+We can look at the tree and determine underlaying business rules in our
+data.
+
+Let us understand this tree output
+
+The right most node -\
+Condition -\> FICO = \>500 NO\
+Class -\> isDelinquent = 1\
+Actual isDelinquent = 0 -\> 14%\
+Actual isDelinquent = 1 -\> 86%\
+Contains 55% of the training dataset
+
+The left most node -\
+Condition -\> FICO = \>500 YES and gender = Female YES\
+Class -\> isDelinquent = 0\
+Actual isDelinquent = 0 -\> 77%\
+Actual isDelinquent = 1 -\> 23%\
+Contains 21% of the training dataset
+
+## Model Validation
+
+```{r}
+# Predicting on the train dataset
+train_predict.class1 <- predict(model1, train, type="class") # Predicted Classes
+train_predict.score1 <- predict(model1, train) # Predicted Probabilities
+
+# Create confusion matrix for train data predictions
+tab.train1 = table(train$isDelinquent, train_predict.class1)
+tab.train1
+
+# Accuracy on train data
+accuracy.train1 = sum(diag(tab.train1)) / sum(tab.train1)
+accuracy.train1
+```
+
+78% accuracy is a clear improvement on the baseline model.\
+The baseline model for this data would predict all borrowers as
+delinquent.\
+Baseline accuracy would be 66%.
+
+Let us see if we can improve model performance furthur by tuning the
+model.
+
+## Model Tuning
+
+```{r}
+# Let us ease the control parameter restrictions to check if we can get a better better fit
+r.ctrl2 = rpart.control(minsplit = 500, minbucket = 150, cp = 0, xval = 10)
+
+# Building the CART model
+
+model2 <- rpart(formula = isDelinquent~., data = train, method = "class", control = r.ctrl2)
+model2
+```
+
+## Visualise the decision tree
+
+```{r}
+#Displaying the decision tree
+fancyRpartPlot(model2)
+```
+
+## Model Validation
+
+```{r}
+# Predicting on the train dataset
+train_predict.class2 <- predict(model2, train, type="class") # Predicted Classes
+train_predict.score2 <- predict(model2, train) # Predicted Probabilities
+
+# Create confusion matrix for train data predictions
+tab.train2 = table(train$isDelinquent, train_predict.class2)
+tab.train2
+
+# Accuracy on train data
+accuracy.train2 = sum(diag(tab.train2)) / sum(tab.train2)
+accuracy.train2
+```
+
+Model2 is better than Model1 with a 7% improvement in accuracy on the
+train data.
+
+```{r}
+model2$variable.importance
+```
+
+Let us see how both the models perform on the test data (? are we
+actually building a better model or leading to overfitting)
+
+## Model Evaluation
+
+### MODEL 1
+
+```{r}
+# Predicting on the test dataset using MODEL 1
+test_predict.class1 <- predict(model1, test, type="class") # Predicted Classes
+test_predict.score1 <- predict(model1, test) # Predicted Probabilities
+
+# Create confusion matrix for test data predictions (using MODEL 1)
+tab.test1 = table(test$isDelinquent, test_predict.class1)
+tab.test1
+
+# Accuracy on train data (MODEL 1 predictions)
+accuracy.test1 = sum(diag(tab.test1)) / sum(tab.test1)
+accuracy.test1
+```
+
+### MODEL 2
+
+```{r}
+# Predicting on the test dataset using MODEL 2
+test_predict.class2 <- predict(model2, test, type="class") # Predicted Classes
+test_predict.score2 <- predict(model2, test) # Predicted Probabilities
+
+# Create confusion matrix for test data predictions (using MODEL 2)
+tab.test2 = table(test$isDelinquent, test_predict.class2)
+tab.test2
+
+# Accuracy on train data (MODEL 2 predictions)
+accuracy.test2 = sum(diag(tab.test2)) / sum(tab.test2)
+accuracy.test2
+```
+
+## Comparing Models
+
+```{r}
+Model_Name = c("Baseline", "Model1", "Model2")
+Train_Accuracy_perc = c(66, accuracy.train1*100, accuracy.train2*100)
+Test_Accuracy_perc = c(66, accuracy.test1*100, accuracy.test2*100)
+output = data.frame(Model_Name,Train_Accuracy_perc,Test_Accuracy_perc)
+output
+```
+
+Model2 performs very well both on the test and train data. We will use
+model2 as the final model.
+
+## Conclusion
+
+-   Decision Tree Model has 19% more accuracy than baseline model
+
+-   Accuracy on the Training Data: 85%
+
+-   Accuracy on the Test Data: 84%
+
+-   Accuracy for test data is almost inline with training data.
+
+-   This tells that the model is neither underfit nor overfit.
+
+## Business Insights
+
+-   FICO, term and gender (in that order) are the most important
+    variables in determining if a borrower will get into a delinquent
+    stage
+-   No borrower shall be given a loan if they are applying for a 36
+    month term loan and have a FICO score in the range 300-500.
+-   Female borrowers with a FICO score greater than 500 should be our
+    target customers.
+-   The decision tree model has significant improvement over baseline in
+    terms of accuracy.
+-   The model is 19% more accurate in identifying delinquent and
+    non-delinquent customers and shall help us set better business
+    rules.
+
+### Things to try
+
+-   Try tuning the model using the diffrent control parameters,
+    including cp to see if you can improve it.
+-   Explore if Accuracy is the best performance metric for such a model
+    (considering the business objective).
